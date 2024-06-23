@@ -1,44 +1,69 @@
 package webserver
 
 import (
+	"context"
 	"errors"
-
 	"github.com/gin-gonic/gin"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
-type RouteHandler struct {
-	name    string
-	method  string
-	handler *func()
-}
-
 type WebServer interface {
-	Run()
-	RegisterRouteHandler(routeHandler RouteHandler) error
+	Listen() error
+	Initialize() error
 }
 
 type GinWebServer struct {
-	internal      *gin.Engine
-	routeHandlers map[string]*func()
+	engine       *gin.Engine
+	logger       *log.Logger
+	routeManager *RouteManager
 }
 
-func CreateGinWebServer() *GinWebServer {
+func CreateGinWebServer(routeManager *RouteManager, logger *log.Logger, opts ...gin.OptionFunc) *GinWebServer {
 	return &GinWebServer{
-		internal:      gin.Default(),
-		routeHandlers: make(map[string]*func()),
+		engine:       gin.New(opts...),
+		logger:       logger,
+		routeManager: routeManager,
 	}
 }
 
-func (webServer *GinWebServer) RegisterRouteHandler(routeHandler *RouteHandler) error {
-	if routeHandler == nil {
-		return errors.New("cannot register a nil routeHandler")
+func (webServer *GinWebServer) Initialize() error {
+	return webServer.routeManager.RegisterRoutes(webServer.engine)
+}
+
+func (webServer *GinWebServer) Listen(port string) error {
+	srv := &http.Server{
+		Addr:    port,
+		Handler: webServer.engine.Handler(),
 	}
 
-	if _, exists := webServer.routeHandlers[routeHandler.name]; exists {
-		return errors.New("route already has a handler")
+	var err error
+	go func() {
+		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			webServer.logger.Fatal(err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	webServer.logger.Println("Shutdown Server ...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if shutdownError := srv.Shutdown(ctx); shutdownError != nil {
+		webServer.logger.Fatal("Server Shutdown:", shutdownError)
 	}
 
-	webServer.routeHandlers[routeHandler.name] = routeHandler.handler
-	webServer.internal.GET(routeHandler.name)
-	return nil
+	select {
+	case <-ctx.Done():
+		webServer.logger.Println("timeout of 5 seconds.")
+	}
+	webServer.logger.Println("Server exiting")
+	return err
 }
