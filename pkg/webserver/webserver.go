@@ -13,7 +13,7 @@ import (
 )
 
 type WebServer interface {
-	Listen() error
+	Listen(port string) error
 	Initialize() error
 }
 
@@ -32,7 +32,10 @@ func CreateGinWebServer(routeManager *RouteManager, logger *log.Logger, opts ...
 }
 
 func (webServer *GinWebServer) Initialize() error {
-	return webServer.routeManager.RegisterRoutes(webServer.engine)
+	if err := webServer.routeManager.RegisterRoutes(webServer.engine); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (webServer *GinWebServer) Listen(port string) error {
@@ -43,6 +46,7 @@ func (webServer *GinWebServer) Listen(port string) error {
 
 	var err error
 	go func() {
+		webServer.logger.Println("Listening...")
 		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			webServer.logger.Fatal(err)
 		}
@@ -54,7 +58,7 @@ func (webServer *GinWebServer) Listen(port string) error {
 
 	webServer.logger.Println("Shutdown Server ...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 	defer cancel()
 	if shutdownError := srv.Shutdown(ctx); shutdownError != nil {
 		webServer.logger.Fatal("Server Shutdown:", shutdownError)
