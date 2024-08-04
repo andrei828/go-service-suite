@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/quic-go/quic-go/http3"
 	"log"
 	"net/http"
 	"os"
@@ -47,7 +48,10 @@ func (webServer *GinWebServer) Listen(port string) error {
 	var err error
 	go func() {
 		webServer.logger.Println("Listening...")
-		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err = http3.ListenAndServeTLS(":443",
+			"/Users/Andrei/Documents/Go/go-service-suite/example.com+5.pem",
+			"/Users/Andrei/Documents/Go/go-service-suite/example.com+5-key.pem",
+			webServer.engine.Handler()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			webServer.logger.Fatal(err)
 		}
 	}()
@@ -58,7 +62,7 @@ func (webServer *GinWebServer) Listen(port string) error {
 
 	webServer.logger.Println("Shutdown Server ...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
 	if shutdownError := srv.Shutdown(ctx); shutdownError != nil {
 		webServer.logger.Fatal("Server Shutdown:", shutdownError)

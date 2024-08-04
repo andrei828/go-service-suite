@@ -8,6 +8,8 @@ import (
 
 func main() {
 	// TODO: Implement DI for al the services below
+
+	// Web Server
 	logger := log.Default()
 	uploader := video.NewUploader(logger)
 	routeManager := webserver.NewRouteManager(uploader, logger)
@@ -21,4 +23,7 @@ func main() {
 	if err := webServer.Listen(":8080"); err != nil {
 		panic("oh no")
 	}
+
+	// gRPC server
+	//server.Run()
 }

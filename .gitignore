@@ -21,4 +21,5 @@ go.work.sum
 # GoLand
 .idea
 
-
+.DS_Store
+*.pem
