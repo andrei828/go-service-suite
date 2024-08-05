@@ -12,7 +12,9 @@ func main() {
 	// Web Server
 	logger := log.Default()
 	uploader := video.NewUploader(logger)
-	routeManager := webserver.NewRouteManager(uploader, logger)
+	downloader := video.NewDownloader(logger)
+	eventHandler := video.NewEventHandler(logger)
+	routeManager := webserver.NewRouteManager(uploader, downloader, eventHandler, logger)
 
 	// Kick off webserver
 	webServer := webserver.CreateGinWebServer(routeManager, logger)

@@ -3,6 +3,7 @@ package video
 import (
 	"github.com/gin-gonic/gin"
 	"log"
+	"net/http"
 )
 
 type Downloader struct {
@@ -20,14 +21,10 @@ func NewDownloader(logger *log.Logger) *Downloader {
 }
 
 func (v *Downloader) RegisterRoute(engine *gin.Engine) error {
-	engine.POST(v.route, v.handler)
+	engine.GET(v.route, v.handler)
 	return nil
 }
 
 func videoDownloaderHandler(ctx *gin.Context) {
-	ctx.Header("Content-Description", "File Transfer")
-	ctx.Header("Content-Transfer-Encoding", "binary")
-	ctx.Header("Content-Disposition", "attachment; filename=movie.mpd")
-	ctx.Header("Content-Type", "application/octet-stream")
-	ctx.File("")
+	ctx.Redirect(http.StatusPermanentRedirect, "/static/bunny/sample_200.mpd")
 }

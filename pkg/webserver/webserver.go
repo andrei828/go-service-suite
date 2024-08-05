@@ -49,8 +49,8 @@ func (webServer *GinWebServer) Listen(port string) error {
 	go func() {
 		webServer.logger.Println("Listening...")
 		if err = http3.ListenAndServeTLS(":443",
-			"/Users/Andrei/Documents/Go/go-service-suite/example.com+5.pem",
-			"/Users/Andrei/Documents/Go/go-service-suite/example.com+5-key.pem",
+			"/Users/andreiliviu/Documents/Go/go-service-suite/example.com+5.pem",
+			"/Users/andreiliviu/Documents/Go/go-service-suite/example.com+5-key.pem",
 			webServer.engine.Handler()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			webServer.logger.Fatal(err)
 		}

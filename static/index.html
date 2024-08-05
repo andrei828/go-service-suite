@@ -15,11 +15,43 @@
 </div>
 <script src="https://cdn.dashjs.org/v3.1.0/dash.all.min.js"></script>
 <script>
+    var player;
     (function () {
-        var url = "https://localhost/static/video/output.mpd";
-        var player = dashjs.MediaPlayer().create();
+        var url = "https://localhost/download_video";
+        player = dashjs.MediaPlayer().create();
+        console.log(dashjs.MediaPlayer.events)
+        player.on(dashjs.MediaPlayer.events['PLAYBACK_PAUSED'], (e) => playerPaused(e, player))
+        player.on(dashjs.MediaPlayer.events['PLAYBACK_PLAYING'], (e) => playerPlayed(e, player))
+        player.on(dashjs.MediaPlayer.events['PLAYBACK_SEEKING'], (e) => playerUpdatedTime(e, player))
         player.initialize(document.querySelector("#videoPlayer"), url, true);
+
+        const eventSource = new EventSource('https://localhost/receive_event');
+
+        eventSource.onmessage = event => {
+            console.log(event.data);
+            setTime(parseInt(event.data));
+        };
     })();
+    
+    function playerPaused(event, player) {
+        player.pause()
+    }
+
+    function playerPlayed(event, player) {
+        player.play()
+    }
+
+    function playerUpdatedTime(event, player) {
+        //player.seek(10)
+    }
+    
+    function getTime() {
+        return player.time()
+    }
+    
+    function setTime(newTime) {
+        player.seek(newTime)
+    }
 </script>
 </body>
 </html>

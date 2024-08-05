@@ -12,33 +12,46 @@ type RouteHandler interface {
 }
 
 type RouteManager struct {
-	logger   *log.Logger
-	uploader *video.Uploader
+	logger       *log.Logger
+	uploader     *video.Uploader
+	downloader   *video.Downloader
+	eventHandler *video.EventHandler
 }
 
-func NewRouteManager(uploader *video.Uploader, logger *log.Logger) *RouteManager {
+func NewRouteManager(
+	uploader *video.Uploader,
+	downloader *video.Downloader,
+	eventHandler *video.EventHandler,
+	logger *log.Logger) *RouteManager {
 	return &RouteManager{
-		logger:   logger,
-		uploader: uploader,
+		logger:       logger,
+		uploader:     uploader,
+		downloader:   downloader,
+		eventHandler: eventHandler,
 	}
 }
 
 func (rm *RouteManager) RegisterRoutes(engine *gin.Engine) error {
 	// register video uploader
 	if err := rm.uploader.RegisterRoute(engine); err != nil {
-		rm.logger.Fatalf("failed to register the video uploader route")
+		rm.logger.Fatalf("failed to register the video uploader route.")
+		return err
+	}
+
+	if err := rm.downloader.RegisterRoute(engine); err != nil {
+		rm.logger.Fatalf("failed to register the video downloader route.")
+		return err
+	}
+
+	if err := rm.eventHandler.RegisterRoutes(engine); err != nil {
+		rm.logger.Fatalf("failed to register the video event routes.")
 		return err
 	}
 
 	engine.GET("/", func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.JSON(200, gin.H{"result": "success"})
+		c.Redirect(http.StatusMovedPermanently, "/static/")
 	})
 
 	engine.StaticFS("/static", http.Dir("./static"))
-	engine.GET("/test", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/static/index.html")
-	})
-
 	return nil
 }
