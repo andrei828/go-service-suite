@@ -13,12 +13,21 @@ type EventStreamRequest struct {
 	Message string `json:"message" binding:"required"`
 }
 type Route struct {
-	path    string
-	handler func(messagesChan chan string) gin.HandlerFunc
-	method  string //`http.MethodPost; http.MethodGet; http.MethodPut etc...`
+	path        string
+	method      string
+	handler     func(ctx *gin.Context)
+	handlerChan func(messagesChan chan string) gin.HandlerFunc
 }
 
-func NewRoute(method string, path string, handler func(messagesChan chan string) gin.HandlerFunc) *Route {
+func NewSSERoute(method string, path string, handlerChan func(messagesChan chan string) gin.HandlerFunc) *Route {
+	return &Route{
+		path:        path,
+		method:      method,
+		handlerChan: handlerChan,
+	}
+}
+
+func NewRoute(method string, path string, handler func(ctx *gin.Context)) *Route {
 	return &Route{
 		path:    path,
 		method:  method,
@@ -38,15 +47,22 @@ func NewEventHandler(logger *log.Logger) *EventHandler {
 		logger:       logger,
 		messagesChan: messagesChan,
 		routes: []*Route{
-			NewRoute(http.MethodPost, "/stream_event", streamEvent),
-			NewRoute(http.MethodGet, "/receive_event", receiveEvent),
+			NewRoute(http.MethodPost, "/play_event", playEvent),
+			NewRoute(http.MethodPost, "/pause_event", pauseEvent),
+			NewSSERoute(http.MethodPost, "/stream_event", streamEvent),
+			NewSSERoute(http.MethodGet, "/receive_event", receiveEvent),
 		},
 	}
 }
 
 func (eh *EventHandler) RegisterRoutes(engine *gin.Engine) error {
 	for _, route := range eh.routes {
-		engine.Handle(route.method, route.path, route.handler(eh.messagesChan))
+		if route.handler != nil {
+			engine.Handle(route.method, route.path, route.handler)
+		}
+		if route.handlerChan != nil {
+			engine.Handle(route.method, route.path, route.handlerChan(eh.messagesChan))
+		}
 	}
 	return nil
 }
@@ -79,6 +95,14 @@ func receiveEvent(messagesChan chan string) gin.HandlerFunc {
 
 		return
 	}
+}
+
+func playEvent(ctx *gin.Context) {
+
+}
+
+func pauseEvent(ctx *gin.Context) {
+
 }
 
 type JSendFailResponse[T any] struct {

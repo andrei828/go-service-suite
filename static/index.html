@@ -16,41 +16,81 @@
 <script src="https://cdn.dashjs.org/v3.1.0/dash.all.min.js"></script>
 <script>
     var player;
+    var isEditing = false;
     (function () {
         var url = "https://localhost/download_video";
         player = dashjs.MediaPlayer().create();
         console.log(dashjs.MediaPlayer.events)
-        player.on(dashjs.MediaPlayer.events['PLAYBACK_PAUSED'], (e) => playerPaused(e, player))
-        player.on(dashjs.MediaPlayer.events['PLAYBACK_PLAYING'], (e) => playerPlayed(e, player))
-        player.on(dashjs.MediaPlayer.events['PLAYBACK_SEEKING'], (e) => playerUpdatedTime(e, player))
+        player.on(dashjs.MediaPlayer.events['PLAYBACK_PAUSED'], async (e) => await playerPaused(e, player))
+        player.on(dashjs.MediaPlayer.events['PLAYBACK_PLAYING'], async(e) => await playerPlayed(e, player))
+        player.on(dashjs.MediaPlayer.events['PLAYBACK_SEEKING'], async (e) => await playerUpdatedTime(e, player))
         player.initialize(document.querySelector("#videoPlayer"), url, true);
 
         const eventSource = new EventSource('https://localhost/receive_event');
 
         eventSource.onmessage = event => {
-            console.log(event.data);
-            setTime(parseInt(event.data));
+            console.log(event.data)
+            try {
+                isEditing = true
+                let time = parseInt(event.data) || -1
+                if (time !== -1) {
+                    player.seek(time)
+                } else if (event.data === "play") {
+                    player.play()
+                } else if (event.data === "pause") {
+                    player.pause()
+                }
+            } finally {
+                isEditing = false;
+            }
         };
     })();
     
-    function playerPaused(event, player) {
-        player.pause()
+    async function playerPaused(event, player) {
+        if (isEditing) {
+            return;
+        }
+        console.log("player paused")
+        const response = await fetch("https://localhost/stream_event", {
+            method: "POST",
+            body: JSON.stringify({ "message": "pause" }),
+            headers: { "Content-Type": "application/json" },
+        });
     }
 
-    function playerPlayed(event, player) {
-        player.play()
+    async function playerPlayed(event, player) {
+        if (isEditing) {
+            return;
+        }
+        console.log("player played")
+        const response = await fetch("https://localhost/stream_event", {
+            method: "POST",
+            body: JSON.stringify({ "message": "play" }),
+            headers: { "Content-Type": "application/json" },
+        });
     }
 
-    function playerUpdatedTime(event, player) {
-        //player.seek(10)
+    async function playerUpdatedTime(event, player) {
+        if (isEditing) {
+            return;
+        }
+        console.log("player seeked")
+        const response = await fetch("https://localhost/stream_event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ "message": `${player.time()}` }),
+        });
     }
     
-    function getTime() {
-        return player.time()
-    }
-    
-    function setTime(newTime) {
-        player.seek(newTime)
+    async function setTime(newTime) {
+        if (isEditing) {
+            return;
+        }
+        const response = await fetch("https://localhost/stream_event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ "message": `${newTime}` }),
+        });
     }
 </script>
 </body>
