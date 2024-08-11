@@ -1,6 +1,7 @@
 package video
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -9,90 +10,90 @@ import (
 	"net/http"
 )
 
-type EventStreamRequest struct {
-	Message string `json:"message" binding:"required"`
-}
-type Route struct {
-	path        string
-	method      string
-	handler     func(ctx *gin.Context)
-	handlerChan func(messagesChan chan string) gin.HandlerFunc
+type Event struct {
+	Message   string `json:"message" binding:"required"`
+	SessionId string `json:"sessionId" binding:"required"`
 }
 
-func NewSSERoute(method string, path string, handlerChan func(messagesChan chan string) gin.HandlerFunc) *Route {
-	return &Route{
-		path:        path,
-		method:      method,
-		handlerChan: handlerChan,
-	}
-}
-
-func NewRoute(method string, path string, handler func(ctx *gin.Context)) *Route {
-	return &Route{
-		path:    path,
-		method:  method,
-		handler: handler,
-	}
-}
+type Connection chan Event
 
 type EventHandler struct {
-	routes       []*Route
-	logger       *log.Logger
-	messagesChan chan string
+	logger      *log.Logger
+	connections []Connection
 }
 
 func NewEventHandler(logger *log.Logger) *EventHandler {
-	messagesChan := make(chan string)
 	return &EventHandler{
-		logger:       logger,
-		messagesChan: messagesChan,
-		routes: []*Route{
-			NewRoute(http.MethodPost, "/play_event", playEvent),
-			NewRoute(http.MethodPost, "/pause_event", pauseEvent),
-			NewSSERoute(http.MethodPost, "/stream_event", streamEvent),
-			NewSSERoute(http.MethodGet, "/receive_event", receiveEvent),
-		},
+		logger:      logger,
+		connections: make([]Connection, 0),
 	}
 }
 
 func (eh *EventHandler) RegisterRoutes(engine *gin.Engine) error {
-	for _, route := range eh.routes {
-		if route.handler != nil {
-			engine.Handle(route.method, route.path, route.handler)
-		}
-		if route.handlerChan != nil {
-			engine.Handle(route.method, route.path, route.handlerChan(eh.messagesChan))
-		}
-	}
+	engine.POST("/play_event", playEvent)
+	engine.POST("/pause_event", pauseEvent)
+	engine.POST("/register_event", registerEvent(eh))
+	engine.GET("/stream_event", headersMiddleware(), registerConn(eh), streamEvent)
 	return nil
 }
 
-func streamEvent(messagesChan chan string) gin.HandlerFunc {
+func remove(s []Connection, i int) []Connection {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
+func registerConn(eh *EventHandler) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var request EventStreamRequest
+		conn := make(Connection)
+		defer func() {
+			close(conn)
+			remove(eh.connections, conn)
+		}()
+		eh.connections = append(eh.connections, conn)
+		ctx.Set("conn", conn)
+		ctx.Next()
+	}
+}
+
+func streamEvent(ctx *gin.Context) {
+	v, ok := ctx.Get("conn")
+	if !ok {
+		return
+	}
+	conn, ok := v.(Connection)
+	if !ok {
+		return
+	}
+	ctx.Stream(func(w io.Writer) bool {
+		event, ok := <-conn
+		if !ok {
+			return false
+		}
+		jsonEvent, err := json.Marshal(event)
+		if err != nil {
+			return false
+		}
+		ctx.SSEvent("message", string(jsonEvent))
+		return true
+	})
+}
+
+func registerEvent(eh *EventHandler) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var request Event
+		eh.logger.Println("Connections: %d", eh.connections)
+		println("Connections: %d", eh.connections)
 		if err := ctx.ShouldBind(&request); err != nil {
 			errorMessage := fmt.Sprintf("request validation error: %s", err.Error())
 			BadRequestResponse(ctx, errors.New(errorMessage))
 			return
 		}
 
-		messagesChan <- request.Message
+		for _, conn := range eh.connections {
+			conn <- request
+		}
+
 		CreatedResponse(ctx, &request.Message)
-
-		return
-	}
-}
-
-func receiveEvent(messagesChan chan string) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		ctx.Stream(func(w io.Writer) bool {
-			if msg, ok := <-messagesChan; ok {
-				ctx.SSEvent("message", msg)
-				return true
-			}
-			return false
-		})
-
 		return
 	}
 }
@@ -137,4 +138,14 @@ func CreatedResponse[T interface{}](c *gin.Context, i *T) {
 	)
 
 	return
+}
+
+func headersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Header().Set("Transfer-Encoding", "chunked")
+		c.Next()
+	}
 }
