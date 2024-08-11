@@ -19,13 +19,13 @@ type Connection chan Event
 
 type EventHandler struct {
 	logger      *log.Logger
-	connections []Connection
+	connections map[Connection]bool
 }
 
 func NewEventHandler(logger *log.Logger) *EventHandler {
 	return &EventHandler{
 		logger:      logger,
-		connections: make([]Connection, 0),
+		connections: map[Connection]bool{},
 	}
 }
 
@@ -37,19 +37,14 @@ func (eh *EventHandler) RegisterRoutes(engine *gin.Engine) error {
 	return nil
 }
 
-func remove(s []Connection, i int) []Connection {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
-}
-
 func registerConn(eh *EventHandler) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		conn := make(Connection)
 		defer func() {
 			close(conn)
-			remove(eh.connections, conn)
+			delete(eh.connections, conn)
 		}()
-		eh.connections = append(eh.connections, conn)
+		eh.connections[conn] = true
 		ctx.Set("conn", conn)
 		ctx.Next()
 	}
@@ -81,15 +76,14 @@ func streamEvent(ctx *gin.Context) {
 func registerEvent(eh *EventHandler) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var request Event
-		eh.logger.Println("Connections: %d", eh.connections)
-		println("Connections: %d", eh.connections)
+		eh.logger.Println("Connections: %d", len(eh.connections), eh.connections)
 		if err := ctx.ShouldBind(&request); err != nil {
 			errorMessage := fmt.Sprintf("request validation error: %s", err.Error())
 			BadRequestResponse(ctx, errors.New(errorMessage))
 			return
 		}
 
-		for _, conn := range eh.connections {
+		for conn := range eh.connections {
 			conn <- request
 		}
 
