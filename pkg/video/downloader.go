@@ -26,5 +26,7 @@ func (v *Downloader) RegisterRoute(engine *gin.Engine) error {
 }
 
 func videoDownloaderHandler(ctx *gin.Context) {
-	ctx.Redirect(http.StatusPermanentRedirect, "/static/bunny/sample_200.mpd")
+	//ctx.Redirect(http.StatusPermanentRedirect, "/static/bunny/sample_200.mpd")
+	//ctx.Redirect(http.StatusPermanentRedirect, "/static/process/planet/planet.mpd")
+	ctx.Redirect(http.StatusPermanentRedirect, "/static/process/bunny/bunny.mpd")
 }
